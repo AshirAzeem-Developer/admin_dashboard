@@ -43,6 +43,13 @@
                      <span class="nav-link-text ms-1">Products</span>
                  </a>
              </li>
+             <!-- Reports Option -->
+             <li class="nav-item">
+                 <a class="nav-link <?= $current_page === 'reports.php' ? 'active bg-gradient-dark text-white' : 'text-dark' ?>" href="./reports.php">
+                     <i class="material-symbols-rounded opacity-5">bar_chart</i>
+                     <span class="nav-link-text ms-1">Reports</span>
+                 </a>
+             </li>
 
              <li class="nav-item">
                  <a class="nav-link text-dark" href="../pages/billing.html">
