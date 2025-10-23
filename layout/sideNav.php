@@ -43,12 +43,57 @@
                      <span class="nav-link-text ms-1">Products</span>
                  </a>
              </li>
-             <!-- Reports Option -->
+             <!-- Reports Option with multiple suboptions (Revenue By Month , Revenue By Year , Revenue By Category , Revenue By Category and Year)-->
+             <?php
+                // PHP variables you'll need, assuming this snippet is inside your sidebar layout file.
+                // $current_page should contain the current page name (e.g., 'reports.php')
+                // $current_report_type should contain the value of $_GET['type'] (e.g., 'month', 'year', etc.)
+                $current_report_type = isset($_GET['type']) ? $_GET['type'] : '';
+                $is_reports_active = ($current_page === 'reports.php');
+                ?>
              <li class="nav-item">
-                 <a class="nav-link <?= $current_page === 'reports.php' ? 'active bg-gradient-dark text-white' : 'text-dark' ?>" href="./reports.php">
-                     <i class="material-symbols-rounded opacity-5">bar_chart</i>
+                 <a class="nav-link <?= $is_reports_active ? 'active bg-gradient-dark text-white' : 'text-dark' ?>"
+                     data-bs-toggle="collapse"
+                     href="#reports-collapse"
+                     role="button"
+                     aria-expanded="<?= $is_reports_active ? 'true' : 'false' ?>"
+                     aria-controls="reports-collapse"
+                     href="./reports.php"> <i class="material-symbols-rounded opacity-5">bar_chart</i>
                      <span class="nav-link-text ms-1">Reports</span>
                  </a>
+
+                 <div class="collapse <?= $is_reports_active ? 'show' : '' ?>" id="reports-collapse">
+                     <ul class="nav flex-column ms-4">
+
+                         <li class="nav-item">
+                             <a class="nav-link <?= $current_report_type === 'month' ? 'active bg-gradient-dark text-white' : 'text-dark' ?>"
+                                 href="reports.php?type=month">
+                                 <span class="nav-link-text ms-1">Revenue By Month</span>
+                             </a>
+                         </li>
+
+                         <li class="nav-item">
+                             <a class="nav-link <?= $current_report_type === 'year' ? 'active bg-gradient-dark text-white' : 'text-dark' ?>"
+                                 href="reports.php?type=year">
+                                 <span class="nav-link-text ms-1">Revenue By Year</span>
+                             </a>
+                         </li>
+
+                         <li class="nav-item">
+                             <a class="nav-link <?= $current_report_type === 'category' ? 'active bg-gradient-dark text-white' : 'text-dark' ?>"
+                                 href="reports.php?type=category">
+                                 <span class="nav-link-text ms-1">Revenue By Category</span>
+                             </a>
+                         </li>
+
+                         <li class="nav-item">
+                             <a class="nav-link <?= $current_report_type === 'category_year' ? 'active bg-gradient-dark text-white' : 'text-dark' ?>"
+                                 href="reports.php?type=category_year">
+                                 <span class="nav-link-text ms-1">Revenue By Category and Year</span>
+                             </a>
+                         </li>
+                     </ul>
+                 </div>
              </li>
 
 

@@ -1,4 +1,200 @@
-<?php include 'config.php'; ?>
+<?php
+include 'config.php';
+
+// --- 1. DETERMINE REPORT TYPE AND FILTERS ---
+$report_type = isset($_GET['type']) ? $_GET['type'] : 'month'; // Default to Revenue By Month
+$selected_year = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
+$selected_category_id = isset($_GET['category_id']) ? intval($_GET['category_id']) : null;
+$report_title = "Revenue Report";
+$report_data = [];
+$categories = [];
+$available_years = []; // New variable for dynamic years
+
+// Helper function to fetch available years
+function fetch_available_years($conn)
+{
+    $years = [];
+    if (isset($conn)) {
+        // Query to select distinct years from the orders table
+        $query = "SELECT DISTINCT YEAR(created_at) AS order_year FROM tbl_orders ORDER BY order_year DESC";
+        $result = $conn->query($query);
+        if ($result && $result->num_rows > 0) {
+            while ($row = $result->fetch_assoc()) {
+                $years[] = $row['order_year'];
+            }
+        }
+    }
+    // If no years found, default to current year to prevent empty list
+    if (empty($years)) {
+        $years[] = date('Y');
+    }
+    return $years;
+}
+
+// Helper function to fetch categories for dropdowns
+function fetch_categories($conn)
+{
+    $categories = [];
+    if (isset($conn)) {
+        $query = "SELECT id, category_name FROM tbl_categories ORDER BY category_name ASC";
+        $result = $conn->query($query);
+        if ($result && $result->num_rows > 0) {
+            while ($row = $result->fetch_assoc()) {
+                $categories[] = $row;
+            }
+        }
+    }
+    return $categories;
+}
+
+// Fetch dynamic years for all relevant reports
+if ($report_type === 'month' || $report_type === 'year' || $report_type === 'category_year') {
+    $available_years = fetch_available_years($conn);
+    // Ensure selected_year is set to a valid year if the default was not in DB
+    if ($selected_year == date('Y') && !in_array(date('Y'), $available_years)) {
+        $selected_year = $available_years[0];
+    } elseif (!in_array($selected_year, $available_years)) {
+        // If the current selected year is not found, default to the latest year
+        $selected_year = $available_years[0];
+    }
+}
+
+// Fetch categories if needed
+if ($report_type === 'category' || $report_type === 'category_year') {
+    $categories = fetch_categories($conn);
+}
+
+
+// --- 2. EXECUTE REPORT LOGIC BASED ON TYPE ---
+
+switch ($report_type) {
+    case 'month':
+        $report_title = "Revenue By Month ({$selected_year})";
+        // SQL: Calculate total revenue for each month of the selected year.
+        $sql = "
+            SELECT 
+                SUM(CASE WHEN MONTH(O.created_at) = 1 THEN OI.subtotal ELSE 0 END) AS Jan,
+                SUM(CASE WHEN MONTH(O.created_at) = 2 THEN OI.subtotal ELSE 0 END) AS Feb,
+                SUM(CASE WHEN MONTH(O.created_at) = 3 THEN OI.subtotal ELSE 0 END) AS Mar,
+                SUM(CASE WHEN MONTH(O.created_at) = 4 THEN OI.subtotal ELSE 0 END) AS Apr,
+                SUM(CASE WHEN MONTH(O.created_at) = 5 THEN OI.subtotal ELSE 0 END) AS May,
+                SUM(CASE WHEN MONTH(O.created_at) = 6 THEN OI.subtotal ELSE 0 END) AS Jun,
+                SUM(CASE WHEN MONTH(O.created_at) = 7 THEN OI.subtotal ELSE 0 END) AS Jul,
+                SUM(CASE WHEN MONTH(O.created_at) = 8 THEN OI.subtotal ELSE 0 END) AS Aug,
+                SUM(CASE WHEN MONTH(O.created_at) = 9 THEN OI.subtotal ELSE 0 END) AS Sep,
+                SUM(CASE WHEN MONTH(O.created_at) = 10 THEN OI.subtotal ELSE 0 END) AS Oct,
+                SUM(CASE WHEN MONTH(O.created_at) = 11 THEN OI.subtotal ELSE 0 END) AS Nov,
+                SUM(CASE WHEN MONTH(O.created_at) = 12 THEN OI.subtotal ELSE 0 END) AS `Dec`
+            FROM tbl_orders O
+            JOIN tbl_order_items OI ON O.id = OI.order_id
+            WHERE O.payment_status = 'paid' AND YEAR(O.created_at) = $selected_year
+        ";
+        break;
+
+    case 'year':
+        $report_title = "Revenue By Year (Monthly Breakdown)";
+        // SQL: Calculate total revenue for each month, grouped by year.
+        $sql = "
+            SELECT 
+                YEAR(O.created_at) AS ReportYear,
+                SUM(CASE WHEN MONTH(O.created_at) = 1 THEN OI.subtotal ELSE 0 END) AS Jan,
+                SUM(CASE WHEN MONTH(O.created_at) = 2 THEN OI.subtotal ELSE 0 END) AS Feb,
+                SUM(CASE WHEN MONTH(O.created_at) = 3 THEN OI.subtotal ELSE 0 END) AS Mar,
+                SUM(CASE WHEN MONTH(O.created_at) = 4 THEN OI.subtotal ELSE 0 END) AS Apr,
+                SUM(CASE WHEN MONTH(O.created_at) = 5 THEN OI.subtotal ELSE 0 END) AS May,
+                SUM(CASE WHEN MONTH(O.created_at) = 6 THEN OI.subtotal ELSE 0 END) AS Jun,
+                SUM(CASE WHEN MONTH(O.created_at) = 7 THEN OI.subtotal ELSE 0 END) AS Jul,
+                SUM(CASE WHEN MONTH(O.created_at) = 8 THEN OI.subtotal ELSE 0 END) AS Aug,
+                SUM(CASE WHEN MONTH(O.created_at) = 9 THEN OI.subtotal ELSE 0 END) AS Sep,
+                SUM(CASE WHEN MONTH(O.created_at) = 10 THEN OI.subtotal ELSE 0 END) AS Oct,
+                SUM(CASE WHEN MONTH(O.created_at) = 11 THEN OI.subtotal ELSE 0 END) AS Nov,
+                SUM(CASE WHEN MONTH(O.created_at) = 12 THEN OI.subtotal ELSE 0 END) AS `Dec`
+            FROM tbl_orders O
+            JOIN tbl_order_items OI ON O.id = OI.order_id
+            WHERE O.payment_status = 'paid'
+            GROUP BY ReportYear
+            ORDER BY ReportYear DESC
+        ";
+        break;
+
+    case 'category':
+        $report_title = "Revenue By Category";
+        // SQL: Calculate total revenue and product count for each category.
+        $sql = "
+            SELECT 
+                C.category_name,
+                SUM(OI.subtotal) AS TotalRevenue,
+                COUNT(OI.product_id) AS TotalProductsSold
+            FROM tbl_order_items OI
+            JOIN tbl_products P ON OI.product_id = P.id
+            JOIN tbl_categories C ON P.category_id = C.id
+            JOIN tbl_orders O ON OI.order_id = O.id
+            WHERE O.payment_status = 'paid'
+            GROUP BY C.category_name
+            ORDER BY TotalRevenue DESC
+        ";
+        break;
+
+    case 'category_year':
+        // FIX: Filtering the query by the $selected_year is critical here.
+        $report_title = "Revenue By Category and Year ({$selected_year})";
+
+        $sql = "
+            SELECT 
+                YEAR(O.created_at) AS ReportYear,
+                C.category_name,
+                SUM(CASE WHEN MONTH(O.created_at) = 1 THEN OI.subtotal ELSE 0 END) AS Jan,
+                SUM(CASE WHEN MONTH(O.created_at) = 2 THEN OI.subtotal ELSE 0 END) AS Feb,
+                SUM(CASE WHEN MONTH(O.created_at) = 3 THEN OI.subtotal ELSE 0 END) AS Mar,
+                SUM(CASE WHEN MONTH(O.created_at) = 4 THEN OI.subtotal ELSE 0 END) AS Apr,
+                SUM(CASE WHEN MONTH(O.created_at) = 5 THEN OI.subtotal ELSE 0 END) AS May,
+                SUM(CASE WHEN MONTH(O.created_at) = 6 THEN OI.subtotal ELSE 0 END) AS Jun,
+                SUM(CASE WHEN MONTH(O.created_at) = 7 THEN OI.subtotal ELSE 0 END) AS Jul,
+                SUM(CASE WHEN MONTH(O.created_at) = 8 THEN OI.subtotal ELSE 0 END) AS Aug,
+                SUM(CASE WHEN MONTH(O.created_at) = 9 THEN OI.subtotal ELSE 0 END) AS Sep,
+                SUM(CASE WHEN MONTH(O.created_at) = 10 THEN OI.subtotal ELSE 0 END) AS Oct,
+                SUM(CASE WHEN MONTH(O.created_at) = 11 THEN OI.subtotal ELSE 0 END) AS Nov,
+                SUM(CASE WHEN MONTH(O.created_at) = 12 THEN OI.subtotal ELSE 0 END) AS `Dec`
+            FROM tbl_orders O
+            JOIN tbl_order_items OI ON O.id = OI.order_id
+            JOIN tbl_products P ON OI.product_id = P.id
+            JOIN tbl_categories C ON P.category_id = C.id
+            WHERE O.payment_status = 'paid' 
+            AND C.id = $selected_category_id 
+            AND YEAR(O.created_at) = $selected_year -- *** FIX APPLIED HERE ***
+            GROUP BY ReportYear, C.category_name
+            ORDER BY ReportYear DESC
+        ";
+
+        if (!$selected_category_id) {
+            $report_title = "Revenue By Category and Year (Select Category)";
+            $sql = "SELECT NULL LIMIT 0";
+        }
+        break;
+
+    default:
+        $sql = "SELECT NULL LIMIT 0";
+}
+
+
+if (isset($conn) && $sql !== "SELECT NULL LIMIT 0") {
+    $result = $conn->query($sql);
+    if ($result === FALSE) {
+        die("SQL Error: " . $conn->error . "<br>Query: " . $sql);
+    }
+
+    if ($result) {
+        if ($report_type === 'month') {
+            $report_data = $result->fetch_assoc();
+        } else {
+            while ($row = $result->fetch_assoc()) {
+                $report_data[] = $row;
+            }
+        }
+    }
+}
+$months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -47,56 +243,145 @@
             </div>
             <div class="card card-body mx-2 mx-md-2 mt-n6">
                 <h5 class="mb-0">Reports</h5>
-                <p class="text-sm">Overview of user activities and statistics.</p>
+                <p class="text-sm">Dynamic report view: **<?= $report_title ?>**</p>
 
-                <div class="row mb-4 p-3 bg-light border-radius-lg shadow-sm">
-                    <div class="col-md-4 mb-3">
-                        <label for="reportTimePeriod" class="form-label">Time Period</label>
-                        <select class="form-select form-select-lg p-2" id="reportTimePeriod" aria-label="Time Period Selection">
-                            <option selected>Select Time Period</option>
-                            <option value="last_7_days">Last 7 Days</option>
-                            <option value="last_30_days">Last 30 Days</option>
-                            <option value="this_month">This Month</option>
-                            <option value="last_month">Last Month</option>
-                            <option value="this_quarter">This Quarter</option>
-                            <option value="last_quarter">Last Quarter</option>
-                            <option value="this_year">This Year</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label for="reportDepartment" class="form-label">Department</label>
-                        <select class="form-select form-select-lg p-2" id="reportDepartment" aria-label="Department Selection">
-                            <option selected>Select Department (Optional)</option>
-                            <option value="sales">Sales</option>
-                            <option value="marketing">Marketing</option>
-                            <option value="finance">Finance</option>
-                            <option value="hr">Human Resources</option>
-                            <option value="operations">Operations</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end mb-3">
-                        <button class="btn bg-gradient-primary w-100 mb-0" id="generateReportButton">
-                            <i class="material-symbols-rounded me-2">analytics</i>
-                            Generate Report
-                        </button>
-                    </div>
-                </div>
+                <form method="GET" action="reports.php" class="row mb-4 p-3 bg-light border-radius-lg shadow-sm">
+                    <input type="hidden" name="type" value="<?= htmlspecialchars($report_type) ?>">
+
+                    <?php if ($report_type === 'month' || $report_type === 'category_year'): ?>
+                        <div class="col-md-4 mb-3">
+                            <label for="reportYear" class="form-label">Select Year</label>
+                            <select class="form-select form-select-lg p-2" name="year" id="reportYear" required>
+                                <?php foreach ($available_years as $y): ?>
+                                    <option value="<?= $y ?>" <?= $selected_year == $y ? 'selected' : '' ?>>
+                                        <?= $y ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($report_type === 'category_year'): ?>
+                        <div class="col-md-5 mb-3">
+                            <label for="reportCategory" class="form-label">Select Category</label>
+                            <select class="form-select form-select-lg p-2" name="category_id" id="reportCategory" required>
+                                <option value="" selected>Select a Category</option>
+                                <?php foreach ($categories as $category): ?>
+                                    <option value="<?= $category['id'] ?>" <?= $selected_category_id == $category['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($category['category_name']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($report_type !== 'year' && $report_type !== 'category'): ?>
+                        <div class="col-md-3 d-flex align-items-end mb-3">
+                            <button type="submit" class="btn bg-gradient-primary w-100 mb-0" id="generateReportButton">
+                                <i class="material-symbols-rounded me-2">analytics</i>
+                                Generate Report
+                            </button>
+                        </div>
+                    <?php endif; ?>
+                </form>
                 <div class="row">
                     <div class="col-12">
                         <div class="card my-4">
                             <div class="card-header p-0 position-relative mt-n4 mx-3 z-index-2">
                                 <div class="bg-gradient-primary shadow-primary border-radius-lg pt-4 pb-3">
-                                    <h6 class="text-white text-capitalize ps-3">Generated Report View</h6>
+                                    <h6 class="text-white text-capitalize ps-3"><?= $report_title ?></h6>
                                 </div>
                             </div>
                             <div class="card-body px-0 pb-2">
-                                <div class="p-3">
-                                    <p class="text-secondary text-sm">
-                                        Use the drop-downs above to refine your data and click **"Generate Report"** to view the results here.
-                                    </p>
-                                    <div style="height: 300px; background-color: #f8f9fa; border-radius: 8px; display: flex; align-items: center; justify-content: center; border: 1px solid #dee2e6;">
-                                        **[Area for charts and report data based on selected filters]**
-                                    </div>
+                                <div class="table-responsive p-0">
+                                    <?php if (empty($report_data) && ($report_type === 'month' || $report_type === 'year' || ($report_type === 'category_year' && $selected_category_id))): ?>
+                                        <p class="text-secondary text-sm p-3">No *paid* order data available for the selected criteria.</p>
+                                    <?php elseif ($report_type === 'category_year' && !$selected_category_id): ?>
+                                        <p class="text-secondary text-sm p-3">Please select a Category and Year to generate the report.</p>
+                                    <?php elseif ($report_type === 'month' && is_array($report_data)): ?>
+                                        <table class="table align-items-center mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <?php foreach ($months as $month): ?>
+                                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7"><?= $month ?></th>
+                                                    <?php endforeach; ?>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <?php foreach ($months as $month): ?>
+                                                        <td class="align-middle text-sm font-weight-bold">
+                                                            <?php
+                                                            // FIX: The alias is 'Dec' in the SQL query, not '`Dec`' when fetching from PHP array
+                                                            $alias = ($month === 'Dec') ? 'Dec' : $month;
+                                                            $value = isset($report_data[$alias]) ? $report_data[$alias] : 0;
+                                                            echo '$' . number_format($value, 2);
+                                                            ?>
+                                                        </td>
+                                                    <?php endforeach; ?>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    <?php elseif ($report_type === 'year' || $report_type === 'category_year'): ?>
+                                        <table class="table align-items-center mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">
+                                                        Year
+                                                    </th>
+                                                    <?php foreach ($months as $month): ?>
+                                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7"><?= $month ?></th>
+                                                    <?php endforeach; ?>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($report_data as $row): ?>
+                                                    <tr>
+                                                        <td class="align-middle text-sm font-weight-bold">
+                                                            <?= $row['ReportYear'] ?>
+                                                        </td>
+                                                        <?php foreach ($months as $month): ?>
+                                                            <td class="align-middle text-sm">
+                                                                <?php
+                                                                // FIX: The alias is 'Dec' in the SQL query, not '`Dec`' when fetching from PHP array
+                                                                $alias = ($month === 'Dec') ? 'Dec' : $month;
+                                                                $value = isset($row[$alias]) ? $row[$alias] : 0;
+                                                                echo '$' . number_format($value, 2);
+                                                                ?>
+                                                            </td>
+                                                        <?php endforeach; ?>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    <?php elseif ($report_type === 'category'): ?>
+                                        <table class="table align-items-center mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Category Name</th>
+                                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Total Revenue (Paid)</th>
+                                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Products Sold</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($report_data as $row): ?>
+                                                    <tr>
+                                                        <td class="align-middle text-sm font-weight-bold">
+                                                            <?= htmlspecialchars($row['category_name']) ?>
+                                                        </td>
+                                                        <td class="align-middle text-sm">
+                                                            $<?= number_format($row['TotalRevenue'], 2) ?>
+                                                        </td>
+                                                        <td class="align-middle text-sm">
+                                                            <?= $row['TotalProductsSold'] ?>
+                                                        </td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    <?php else: ?>
+                                        <p class="text-secondary text-sm p-3">Select a report type from the sidebar to begin.</p>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -104,12 +389,9 @@
                 </div>
             </div>
         </div>
-
-    </div>
     </div>
 
-    </div>
-    <div class="fixed-plugin">
+    <div class="fixed-plugin" hidden>
         <a class="fixed-plugin-button text-dark position-fixed px-3 py-2">
             <i class="material-symbols-rounded py-2">settings</i>
         </a>
