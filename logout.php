@@ -5,21 +5,21 @@
         session_unset();
         session_destroy();
 
-        header('Location: sign-in.php', true);
+        header('Location: http://localhost/kharido.pk/admin_dashboard/sign-in.php', true);
         exit();
     }
 
     if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== TRUE) {
-        header("Location: sign-in.php");
+        header("Location: http://localhost/kharido.pk/admin_dashboard/sign-in.php");
         exit();
     }
 
-    if (isset($_GET['action']) && $_GET['action'] === 'signout') {
-        handleSignout();
-    }
+    // if (isset($_GET['action']) && $_GET['action'] === 'signout') {
+    //     handleSignout();
+    // }
     // If using your original POST method:
 
-    if (isset($_POST['signout'])) {
-        handleSignout();
-    }
+    // if (isset($_POST['signout'])) {
+    //     handleSignout();
+    // }
     ?>
