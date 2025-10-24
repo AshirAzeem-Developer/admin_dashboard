@@ -68,7 +68,7 @@
   $totalUsers = $result->fetch_assoc()['user_count'];
   ?>
   <?php include 'layout/sideNav.php'; ?>
-  <div class="main-content position-relative max-height-vh-100 h-100">
+  <div class="main-content position-relative max-height-vh-100 h-100 ms-auto pe-5" style="width: 82%;">
     <div class="container-fluid px-2 px-md-4">
       <?php include 'layout/header.php'; ?>
       <div

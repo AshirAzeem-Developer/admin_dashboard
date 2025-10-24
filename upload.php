@@ -55,7 +55,7 @@ include 'config.php';
     $totalUsers = $result->fetch_assoc()['user_count'];
     ?>
     <?php include './layout/sideNav.php'; ?>
-    <main class="main-content position-relative max-height-vh-100 h-100 border-radius-lg ">
+    <main class="main-content position-relative max-height-vh-100 h-100 border-radius-lg ms-auto pe-5" style="width: 82%;">
 
         <?php include './layout/header.php' ?>
         <?php

@@ -5,10 +5,12 @@ include 'config.php';
 $report_type = isset($_GET['type']) ? $_GET['type'] : 'month'; // Default to Revenue By Month
 $selected_year = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
 $selected_category_id = isset($_GET['category_id']) ? intval($_GET['category_id']) : null;
+$payment_filter = isset($_GET['payment_filter']) ? $_GET['payment_filter'] : 'paid'; // Default to 'paid'
+
 $report_title = "Revenue Report";
 $report_data = [];
 $categories = [];
-$available_years = []; // New variable for dynamic years
+$available_years = [];
 
 // Helper function to fetch available years
 function fetch_available_years($conn)
@@ -24,7 +26,7 @@ function fetch_available_years($conn)
             }
         }
     }
-    // If no years found, default to current year to prevent empty list
+    // If no years found, default to current year
     if (empty($years)) {
         $years[] = date('Y');
     }
@@ -50,11 +52,10 @@ function fetch_categories($conn)
 // Fetch dynamic years for all relevant reports
 if ($report_type === 'month' || $report_type === 'year' || $report_type === 'category_year') {
     $available_years = fetch_available_years($conn);
-    // Ensure selected_year is set to a valid year if the default was not in DB
+    // Ensure selected_year is set to a valid year or the latest available
     if ($selected_year == date('Y') && !in_array(date('Y'), $available_years)) {
         $selected_year = $available_years[0];
     } elseif (!in_array($selected_year, $available_years)) {
-        // If the current selected year is not found, default to the latest year
         $selected_year = $available_years[0];
     }
 }
@@ -64,13 +65,25 @@ if ($report_type === 'category' || $report_type === 'category_year') {
     $categories = fetch_categories($conn);
 }
 
+// --- Dynamic SQL WHERE Clause based on $payment_filter ---
+$payment_status_condition = "";
+$report_status_text = "";
+
+if ($payment_filter === 'paid') {
+    $payment_status_condition = "O.payment_status = 'paid'";
+    $report_status_text = " (Paid Orders)";
+} else {
+    // Orders that are not paid: 'pending', 'failed', 'refunded'
+    $payment_status_condition = "O.payment_status IN ('pending', 'failed', 'refunded')";
+    $report_status_text = " (Unpaid/Pending Orders)";
+}
+
 
 // --- 2. EXECUTE REPORT LOGIC BASED ON TYPE ---
 
 switch ($report_type) {
     case 'month':
-        $report_title = "Revenue By Month ({$selected_year})";
-        // SQL: Calculate total revenue for each month of the selected year.
+        $report_title = "Revenue By Month ({$selected_year}) {$report_status_text}";
         $sql = "
             SELECT 
                 SUM(CASE WHEN MONTH(O.created_at) = 1 THEN OI.subtotal ELSE 0 END) AS Jan,
@@ -87,13 +100,12 @@ switch ($report_type) {
                 SUM(CASE WHEN MONTH(O.created_at) = 12 THEN OI.subtotal ELSE 0 END) AS `Dec`
             FROM tbl_orders O
             JOIN tbl_order_items OI ON O.id = OI.order_id
-            WHERE O.payment_status = 'paid' AND YEAR(O.created_at) = $selected_year
+            WHERE $payment_status_condition AND YEAR(O.created_at) = $selected_year
         ";
         break;
 
     case 'year':
-        $report_title = "Revenue By Year (Monthly Breakdown)";
-        // SQL: Calculate total revenue for each month, grouped by year.
+        $report_title = "Revenue By Year (Monthly Breakdown) {$report_status_text}";
         $sql = "
             SELECT 
                 YEAR(O.created_at) AS ReportYear,
@@ -111,15 +123,14 @@ switch ($report_type) {
                 SUM(CASE WHEN MONTH(O.created_at) = 12 THEN OI.subtotal ELSE 0 END) AS `Dec`
             FROM tbl_orders O
             JOIN tbl_order_items OI ON O.id = OI.order_id
-            WHERE O.payment_status = 'paid'
+            WHERE $payment_status_condition
             GROUP BY ReportYear
             ORDER BY ReportYear DESC
         ";
         break;
 
     case 'category':
-        $report_title = "Revenue By Category";
-        // SQL: Calculate total revenue and product count for each category.
+        $report_title = "Revenue By Category {$report_status_text}";
         $sql = "
             SELECT 
                 C.category_name,
@@ -129,16 +140,14 @@ switch ($report_type) {
             JOIN tbl_products P ON OI.product_id = P.id
             JOIN tbl_categories C ON P.category_id = C.id
             JOIN tbl_orders O ON OI.order_id = O.id
-            WHERE O.payment_status = 'paid'
+            WHERE $payment_status_condition
             GROUP BY C.category_name
             ORDER BY TotalRevenue DESC
         ";
         break;
 
     case 'category_year':
-        // FIX: Filtering the query by the $selected_year is critical here.
-        $report_title = "Revenue By Category and Year ({$selected_year})";
-
+        $report_title = "Revenue By Category and Year ({$selected_year}) {$report_status_text}";
         $sql = "
             SELECT 
                 YEAR(O.created_at) AS ReportYear,
@@ -159,9 +168,9 @@ switch ($report_type) {
             JOIN tbl_order_items OI ON O.id = OI.order_id
             JOIN tbl_products P ON OI.product_id = P.id
             JOIN tbl_categories C ON P.category_id = C.id
-            WHERE O.payment_status = 'paid' 
+            WHERE $payment_status_condition
             AND C.id = $selected_category_id 
-            AND YEAR(O.created_at) = $selected_year -- *** FIX APPLIED HERE ***
+            AND YEAR(O.created_at) = $selected_year 
             GROUP BY ReportYear, C.category_name
             ORDER BY ReportYear DESC
         ";
@@ -231,7 +240,7 @@ $months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
 <body class="g-sidenav-show bg-gray-100">
 
     <?php include 'layout/sideNav.php'; ?>
-    <div class="main-content position-relative max-height-vh-100 h-100">
+    <div class="main-content position-relative max-height-vh-100 h-100  ms-auto pe-4" style="width: 82%;">
         <div class="container-fluid px-2 px-md-4">
             <?php include 'layout/header.php'; ?>
             <div
@@ -247,6 +256,14 @@ $months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
 
                 <form method="GET" action="reports.php" class="row mb-4 p-3 bg-light border-radius-lg shadow-sm">
                     <input type="hidden" name="type" value="<?= htmlspecialchars($report_type) ?>">
+
+                    <div class="col-md-<?= ($report_type === 'month' || $report_type === 'category_year') ? '4' : '6' ?> mb-3">
+                        <label for="paymentFilter" class="form-label">Payment Status</label>
+                        <select class="form-select form-select-lg p-2" name="payment_filter" id="paymentFilter">
+                            <option value="paid" <?= $payment_filter == 'paid' ? 'selected' : '' ?>>Paid Orders (Revenue)</option>
+                            <option value="unpaid" <?= $payment_filter == 'unpaid' ? 'selected' : '' ?>>Unpaid/Pending/Failed Orders</option>
+                        </select>
+                    </div>
 
                     <?php if ($report_type === 'month' || $report_type === 'category_year'): ?>
                         <div class="col-md-4 mb-3">
@@ -275,11 +292,20 @@ $months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
                         </div>
                     <?php endif; ?>
 
-                    <?php if ($report_type !== 'year' && $report_type !== 'category'): ?>
-                        <div class="col-md-3 d-flex align-items-end mb-3">
+                    <?php if ($report_type === 'month' || $report_type === 'category_year'): ?>
+                        <div class="col-md-<?= ($report_type === 'month') ? '4' : '3' ?> d-flex align-items-end mb-3">
                             <button type="submit" class="btn bg-gradient-primary w-100 mb-0" id="generateReportButton">
                                 <i class="material-symbols-rounded me-2">analytics</i>
                                 Generate Report
+                            </button>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($report_type === 'year' || $report_type === 'category'): ?>
+                        <div class="col-md-6 d-flex align-items-end mb-3">
+                            <button type="submit" class="btn bg-gradient-primary w-100 mb-0" id="generateReportButton">
+                                <i class="material-symbols-rounded me-2">analytics</i>
+                                Apply Filter
                             </button>
                         </div>
                     <?php endif; ?>
@@ -295,7 +321,7 @@ $months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
                             <div class="card-body px-0 pb-2">
                                 <div class="table-responsive p-0">
                                     <?php if (empty($report_data) && ($report_type === 'month' || $report_type === 'year' || ($report_type === 'category_year' && $selected_category_id))): ?>
-                                        <p class="text-secondary text-sm p-3">No *paid* order data available for the selected criteria.</p>
+                                        <p class="text-secondary text-sm p-3">No orders found for the selected criteria and payment status.</p>
                                     <?php elseif ($report_type === 'category_year' && !$selected_category_id): ?>
                                         <p class="text-secondary text-sm p-3">Please select a Category and Year to generate the report.</p>
                                     <?php elseif ($report_type === 'month' && is_array($report_data)): ?>
@@ -312,7 +338,6 @@ $months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
                                                     <?php foreach ($months as $month): ?>
                                                         <td class="align-middle text-sm font-weight-bold">
                                                             <?php
-                                                            // FIX: The alias is 'Dec' in the SQL query, not '`Dec`' when fetching from PHP array
                                                             $alias = ($month === 'Dec') ? 'Dec' : $month;
                                                             $value = isset($report_data[$alias]) ? $report_data[$alias] : 0;
                                                             echo '$' . number_format($value, 2);
@@ -343,7 +368,6 @@ $months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
                                                         <?php foreach ($months as $month): ?>
                                                             <td class="align-middle text-sm">
                                                                 <?php
-                                                                // FIX: The alias is 'Dec' in the SQL query, not '`Dec`' when fetching from PHP array
                                                                 $alias = ($month === 'Dec') ? 'Dec' : $month;
                                                                 $value = isset($row[$alias]) ? $row[$alias] : 0;
                                                                 echo '$' . number_format($value, 2);
@@ -359,7 +383,7 @@ $months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
                                             <thead>
                                                 <tr>
                                                     <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Category Name</th>
-                                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Total Revenue (Paid)</th>
+                                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Total Revenue <?= $report_status_text ?></th>
                                                     <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Products Sold</th>
                                                 </tr>
                                             </thead>
